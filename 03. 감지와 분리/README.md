@@ -93,7 +93,7 @@ inport junit.framework.*
 public class SaleTest extends TestCase {
     public void testDisplayAnItem(){
         FakeDisplay display = new FakeDisplay();
-        Sale sale new Sale(display);
+        Sale sale = new Sale(display);
         
         sale.scan("1");
         assertEquals("Milk $3.99", display.getLastLine())
@@ -120,22 +120,42 @@ showLine 메소드는 한줄의 텍스트를 받아서 lastLine변수에 대입�
 앞서 작성한 테스트 루틴을 사용하면 Sale클래스가 사용될 때 텍스트가 제대로 디스플레이로 전달됬는지 확인할 수 있다.
 
 ### 가짜 객체의 양면성
-객체는양면성, 즉 두가지 측면을 가진다는 점을 이해하기 쉽지 않다.  
+가짜 객체는 양면성, 즉 두가지 측면을 가진다는 점을 이해하기 쉽지 않다.  
 그림 3.4에서 FakeDisplay 클래스를 다시 한 번 살펴보자.
 ![KakaoTalk_20221128_185642432](https://user-images.githubusercontent.com/50142323/204248733-3600402a-571d-4f4b-ae82-9bf233fe1664.jpg)
 
 FakeDisplay 클래스는 Display 인터페이스를 구현하기 떄문에 showLine 메소드가 필요하다.  
 이 메소드는 Display 인터페이스의 유일한 메소드이자 Sale 클래스가 바라볼 수 있는 유일한 메소드이고, 또 하나의 메소드인 getLastLine은 테스트용 이다.  
-그래서 변수를 Display가 아니라 FakeDisplay 타입으로 선언한 것 이다.
+그래서 변수를 Display가 아니라 FakeDisplay 타입으로 선언한 것 이다.  
+Sale 클래스는 가짜 화면을 Display 타입으로 바라볼 것이지만, 테스트할 때만큼은 FakeDisplay 타입으로 바라봐야 한다.  
+그렇지 않으면 getLastLine을 호출해서 화면에 표시된 내용을 확인할 수 없기 때문이다.
+
+### 가짜 객체의 핵심
+앞의 예제는 매우 간단한 것이지만 가짜 객체의 핵심 요점을 충분히 보여줬다.  
+다양한 방식으로 가짜 객체가 구현될 수 있는데, 객체 지향 언어는 대체로 좀 전 예제의 FakeDisplay 클래스처럼 간단한 클래스를 사용해서 구현한다.  
+객체 지향이 아닌 언어에서는 대체 함수를 정의함으로서 가짜 코드를 구현할 수 있다.(자세한 내용은 19장을 참조)
+
+### 모조 객체
+가짜 객체는 작성하기 쉬울 뿐 아니라 매우 유용한 감지 도구이다.  
+만일 가짜객체를 많이 사용해야 한다면, 발전된 모조 객체(mock object)의 사용을 고려할 만하다.  
+모조 객체는 내부적으로 검증을 수행하는 가짜 객체를 말한다. 다음은 모조 객체를 활용해 작성된 테스트 루틴의 예다.
 ```Java
 inport junit.framework.*
+
 public class SaleTest extends TestCase {
     public void testDisplayAnItem(){
-        **FakeDisplay** display = new FakeDisplay();
-        Sale sale new Sale(display);
-        
+        MockDisplay display = new MockDisplay();
+        display.setExpectation("showLine", "Milk $3.99");        
+        Sale sale = new Sale(display);        
         sale.scan("1");
-        assertEquals("Milk $3.99", **display.getLastLine()**)
+        display.verify();
     }
 }
 ```
+
+모조 객체의 장점은 예상되는 메소드 호출을 미리 모조 객체에 알려주고, 실제로 메소드가 호출됐는지 검증하도록 지시할 수 있다는 점이다.  
+위의 테스트 루틴은
+1. 먼저 "Milk $3.99"인수와 함께 showLine 메소드가 호출될 것이라고 화면객체에 알려주며, 이에 따라 값이 설정된 객체를 테스트 루틴 내에서 사용한다.
+2. scan() 메소드를 호출하고 이어서 verify() 메소드를 호출하는데, 이 메소드는 설정 값대로 작업이 수행됐는지를 검증하며 그렇지 않을경우 테스트는 실패한다.
+
+모조 객체는 매우 강력한 도구로서 다양한 프레임워크들이 존재하지만, 모든 언어에서 사용 가능한 것은 아니며, 대부분의 경우 간단한 가짜 객체 만으로도 충분하다.
