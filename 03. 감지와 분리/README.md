@@ -49,10 +49,73 @@ public class NetworkBridge {
 이때 화면에 올바르게 표시되는지 여부를 어떻게 테스트 할 수 있을까?  
 코드 내부의 어느곳에서 화면 갱신을 수행하는지 정확히 구분할 수 있다면 그림 3.2처럼 설계를 변경할 수 있다.
 ![KakaoTalk_20221128_175821200_01](https://user-images.githubusercontent.com/50142323/204240226-fa0a6a2c-8099-4806-b818-8c54579492c5.jpg)
+
 ArtR56Display라는 새로운 클래스가 추가된 것을 볼 수 있다.  
-이 클랫스는 현재 사용중인 디스플레이 장치와 통신하는 데 필요한 모든 코드를 포함하고 있고 화면에 표시될 텍스트를 이 클래스에 전달하기만 하면 된다.  
+이 클래스는 현재 사용중인 디스플레이 장치와 통신하는 데 필요한 모든 코드를 포함하고 있고 화면에 표시될 텍스트를 이 클래스에 전달하기만 하면 된다.  
 Sale 클래스 내부에 들어있던 화면 표시와 관련된 코드를 ArtR56Display클래스로 옮겨도 시스템의 동작은 이전과 달라질 것이 없기 때문이다.  
 이러한 코드 이동은 그림 3.3과 같은 설계가 가능하다는 장점을 가지게 된다.
 ![KakaoTalk_20221128_175821200](https://user-images.githubusercontent.com/50142323/204240894-33470c74-04d0-451a-be0d-b098fe358f28.jpg)
 
+이제 Sale 클래스는 ArtR56Display 클래스 뿐 아니라 FakeDisplay 클래스와도 통신 할 수 있게 되고, 이 FakeDisplay 클래스는 Sale클래스가 무슨 동작을 하는지 확인하기 위한 테스트 루틴을 작성할 수 있다.  
+Sale 객체에 인수로서 전달되는 디스플레이 객체는 Display 인터페이스를 구현하는 클래스이기만 하면 어떤 클래스의 객체도 가능하기 때문이다.
+
+```Java
+public class Display {
+    void showLine(String line);
+}
+```
+
+ArtR56Display와 FakeDisplay 모두 Display 인터페이스를 구현한다.  
+Sale객체는 생성자를 통해 디스플레이를 전달받고 내부적으로 이를 유지할 수 있다.
+
+```Java
+public class Sale {
+    private Dispaly display;
+    
+    public Sale(Display display){
+        this.display = display;
+    }
+    
+    public void scan(String barcode){
+        ...
+        String itemLine = item.name()
+            + " " + item.price().asDisplayText();
+        display.showLine(itemLine);
+        ...
+    }
+}
+```
+
+scan 메소드는 display 변수의 showLine 메소드를 호출하고, 어떤 동작이 수행될 지는 Sale클래스에 전달한 디스플레이가 무엇인지에 따라 다르다.  
+다음 코드는 이러한 확인에 사용될수 있는 테스트 코드 예제 이다.
+```Java
+inport junit.framework.*
+public class SaleTest extends TestCase {
+    public void testDisplayAnItem(){
+        FakeDisplay display = new FakeDisplay();
+        Sale sale new Sale(display);
+        
+        sale.scan("1");
+        assertEquals("Milk $3.99", display.getLastLine())
+    }
+}
+```
+
+FakeDisplay 클래스는 다소 독특한 면이 있다. 자세히 살펴보자.
+```Java
+public class FakeDisplay implements Display {
+    private string lastLine = "";
+    
+    public void showLine(String line) {
+        lastLine = line;
+    }
+    
+    public String getLastLine() {
+        return lastLine;
+    }
+}
+```
+
+showLine 메소드는 한줄의 텍스트를 받아서 lastLine변수에 대입한다. 그리고 getLastLine메소드는 호출될 때마다 이 텍스트를 반환한다.  
+앞서 작성한 테스트 루틴을 사용하면 Sale클래스가 사용될 때 텍스트가 제대로 디스플레이로 전달됬는지 확인할 수 있다.
 
