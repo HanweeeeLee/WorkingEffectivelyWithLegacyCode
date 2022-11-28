@@ -119,3 +119,23 @@ public class FakeDisplay implements Display {
 showLine 메소드는 한줄의 텍스트를 받아서 lastLine변수에 대입한다. 그리고 getLastLine메소드는 호출될 때마다 이 텍스트를 반환한다.  
 앞서 작성한 테스트 루틴을 사용하면 Sale클래스가 사용될 때 텍스트가 제대로 디스플레이로 전달됬는지 확인할 수 있다.
 
+### 가짜 객체의 양면성
+객체는양면성, 즉 두가지 측면을 가진다는 점을 이해하기 쉽지 않다.  
+그림 3.4에서 FakeDisplay 클래스를 다시 한 번 살펴보자.
+![KakaoTalk_20221128_185642432](https://user-images.githubusercontent.com/50142323/204248733-3600402a-571d-4f4b-ae82-9bf233fe1664.jpg)
+
+FakeDisplay 클래스는 Display 인터페이스를 구현하기 떄문에 showLine 메소드가 필요하다.  
+이 메소드는 Display 인터페이스의 유일한 메소드이자 Sale 클래스가 바라볼 수 있는 유일한 메소드이고, 또 하나의 메소드인 getLastLine은 테스트용 이다.  
+그래서 변수를 Display가 아니라 FakeDisplay 타입으로 선언한 것 이다.
+```Java
+inport junit.framework.*
+public class SaleTest extends TestCase {
+    public void testDisplayAnItem(){
+        **FakeDisplay** display = new FakeDisplay();
+        Sale sale new Sale(display);
+        
+        sale.scan("1");
+        assertEquals("Milk $3.99", **display.getLastLine()**)
+    }
+}
+```
