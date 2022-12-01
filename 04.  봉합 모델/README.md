@@ -51,3 +51,53 @@ C나 C++의 경우 일반적으로 링크 봉합을 이용하는 가장 쉬운 �
 
 ### 객체 봉합
 객체 봉합은 객체 지향 언어에서 사용할 수 있는 봉합 기법들 중에서 가장 유용하다.  
+다음의 예제를 보자
+![KakaoTalk_20221201_190118477](https://user-images.githubusercontent.com/50142323/205024099-0a709286-3206-4921-906a-7443356b0940.jpg)
+다음과 같이 호출했을 때 어느 메소드가 호출될까?
+```JAVA
+cell.Recalculate();
+```
+cell 변수가 어느 객체를 가리키는지 모르면 어느 함수가 호출될지 알 수 없다.  
+다른 코드의 변경없이 호출되는 REcalculate 메소드를 변경할 수 있다면 이 호출 위치를 봉합지점이라고 부를 수 있다.  
+다만, 객체 지향 언어의 메소드 호출이 언제나 봉합 지점이 되는것은 아니다.  
+다음 예제는 봉합이 아닌 호출을 보여준다.
+```JAVA
+public class CustomSpreadsheet extends Spreadsheet
+{
+  public Spreadsheet buildMartSheet() {
+    ...
+    Cell cell = new FormulaCell(this, "A1", "=A2+A3");
+    ...
+    cell.Recalculate();
+    ...
+  }
+  ...
+}
+```
+이 코드에서는 셀을 생성하고 동일 메소드 내에서 이 객체를 사용하고 있다.  
+이 경우 Recalculate 메소드 호출은 객체 봉합이 아니다. 활성화 지점이 없기 떄문이다.  
+선택권은 cell 변수에 저장된 객체의 클래스에게 있으며, 우리는 호출될 Recalculate 메소드를 변경할 수 없다.  
+Cell 변수의 클래스는 객체가 생성될 때 결정되므로, 메소드를 수정하지 않으면서 cell 클래스를 변경할 수는 없다.
+다음의 경우를 보자
+```JAVA
+public class CustomSpreadsheet extends Spreadsheet
+{
+  public Spreadsheet buildMartSheet(Cell cell) {
+    ...
+    cell.Recalculate();
+    ...
+  }
+  ...
+}
+```
+cell.Recalculat 호출은 봉합 지점일까? 그렇다.  
+테스트중에 CustomSpreadsheet 클래스를 작성한 후, 어떤 종류의 Cell 객체든 인수로서 제공하면서 buildMartSheet 메소드를 호출할 수 있기 때문이다.  
+따라서 호출하는 쪽의 코드를 변경하지 않으면서 cell.Recalculate 메소드의 동작을 변경할 수 있다.  
+여기서 활성화 지점은 buildMartSheet의 인수 리스트다.  
+어떤 종류의 객체를 전달할지 결정하고, 테스트에 필요하도록 Recalculate 메소드의 동작을 변경 할 수 있기 때문이다.
+
+### 결론
+테스트를 수행 할 때 적절한 종류의 봉합을 선택하는 것은 중요한 일이다.  
+일반적으로 객체 봉합은 객체 지향 언어에서 가장 적합한 방법이다.  
+전처리 봉합과 링크 봉합도 편리할 때가 있지만 객체 봉합만큼 분명하지는 않을뿐더러, 전처리 봉합과 링크 봉합에 의존하는 테스트 루틴은 관리하기도 매우 어렵다.  
+전처리 봉합과 링크 봉합은 의존관계가 매우 복잡하거나 다른 대안이 없을 경우에 최후의 카드로서 사용하는 편이 바람직하다.
