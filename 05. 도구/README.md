@@ -122,6 +122,7 @@ FIT 관련 정보를 확인하려면 [http://fit.c2.com](http://fit.c2.com)을 �
 ### 피트니스
 위키상에 구축된 FIT을 가리킨다.  
 [http://fitness.org](http://fitness.org)
+[http://docs.fitnesse.org/FrontPage](http://docs.fitnesse.org/FrontPage) 여긴듯??
 
 
 
