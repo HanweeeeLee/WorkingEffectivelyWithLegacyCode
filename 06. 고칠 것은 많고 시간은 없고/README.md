@@ -79,7 +79,8 @@ public class TransactionGate { // 맨 위에있던 걸 다시 수정해보자
 }
 ```
 여전히 임시 변수가 남아있지만 코드는 한결 정리됐다.  
-지금까지 설명한 것은 발아 메소드(sprout method)의 예다. 발아 메소드의 작성 순서는 다음과 같다.  
+지금까지 설명한 것은 발아 메소드(sprout method)의 예다. 
+### 발아 메소드의 작성 순서 
 1. 어느 부분에 코드 변경이 필요한지 식별한다.
 2. 메소드 내의 특정 위치에서 일련을 명령문으로서 구현할 수 있는 변경이라면, 필요한 처리를 수행하는 신규 메소드를 호출하는 코드를 작성한 후 주석처리 한다.
 3. 호출되는 메소드가 필요로 하는 지역 변수를 확인하고, 이 변수들을 신규 메소드 호출의 인수로 전달한다.
@@ -95,9 +96,115 @@ public class TransactionGate { // 맨 위에있던 걸 다시 수정해보자
 기존의 메소드는 상당량의 복잡한 코드와 한 개의 신규 발아 메소드가 포함되는 형태가 될 수 있는데, 이처럼 일부 위치에 대해서만 작업하면 코드의 의도를 이해하기 힘들어지기 때문에 기존 메소드는 만들다 만 것 같은 상태가 되어버린다.  
 이는 적어도 원래의 클래스를 나중에 테스트 루틴으로 보호할 떄 추가적인 작업을 해야 한다는것을 의미한다.  
 
+장점: 기존 코드와 새로운 코드를 확실히 구분 할 수 있다. 기존 코드를 테스트 루틴으로 보호할 수 없더라도 최소한 변경 부분을 개별적으로 이해하고 고칠 수 있으며, 기존 코드 사이의 인터페이스도 분명해진다. 또한 영향을 받는 변수들을 모두 파악할 수 있기 떄문에 코드의 정확성도 쉽게 판단할 수 있다. 
 
+## 발아 클래스
+클래스 단위의 테스트가 의존성 등의 이유로 (주어진 시간 안에) 테스트 하네스 안으로 넣지 못한다면 이 방법을 사용해보자.  
 
+```Cpp
+std::string QuarterlyReportGenerator::generate() {
+    std::vector<Result> results = database.queryResults(beginDate, endDate);
+    std::string pageText;
+    pageText += "<html><head><title>"
+        "quarterly Report"
+        "</title></head><body><table>";
+    if (results.size() != 0) {
+        for (std::vector<Result>::iterator it = results.begin(); it != results.end() ; ++it) {
+            pageText += "<tr>";
+            pageText += "<td>" + it->department + "</td>";
+            pageText += "<td>" + it->manager + "</td>";
+            char buffer [128];
+            sprintf(buffer, "<td>$%d</td>", it->netProfit / 100);
+            pageText += std::string(buffer);
+            sprintf(buffer, "<td>$%d</td>", it->operatingExpense / 100);
+            pageText += std::string(buffer);
+            pageText += "</tr>";
+        }
+    } else {
+        pageText += "No results for this period";
+    }
+    pageText += "</table>";
+    pageText += "</body>";
+    pageText += "</html>";
+    return pageText;
+}
+```
+이 코드가 생성하는 HTML 테이블에 헤더 행을 추가한다고 가정하자. 헤더 행은 다음과 같다.
+```HTML
+"<tr><td>Department</td><td>Manager</td><td>Profit</td><td>Expenses</td></tr>"
+```
+또한 이 클래스는 무척 커서 클래스 전체를 테스트 하네스에 추가하는 데만 꼬박 하루가 걸리고, 현재 그럴 여유가 없다고 가정하자.  
+이 변경은 QuarterlyReportTableHeaderProducer라는 소규모 클래스로 구현할 수 있다.  
+테스트 주도 개발을 통해 클래스를 개발해보자.  
+```Cpp
+using namespace std;
+class QuarterlyReportTableHeaderProducer {
+public: 
+    string makeHeader();
+};
 
+string QuarterlyReportTableHeaderProducer::makeHeader() {
+    return "<tr><td>Department</td><td>Manager</td><td>Profit</td><td>Expenses</td></tr>"
+}
+```
+QuarterlyReportGenerator::generate() 메소드 내에서 이 클래스를 인스턴스화해 직접 호출한다.
+```Cpp
+...
+QuarterlyReportTableHeaderProducer producer;
+pageText += producer.makeHeader();
+...
+```
+이런 질문을 할 수 있다.  
+"이런거 하려고 클래스까지 만드나요? 설계상 전혀 도움이 되지 않습니다."  
+맞는 말이다. 이 방법을 사용한 유일한 이유는 의존 관계의 복잡성에서 벗어나기 위한 것이다.  
+  
+이 클래스를 QuarterlyReportTableHeaderGenerator라 명명하고, 다음과 같은 인터페이스를 갖게 하면 어떻게 될까?
+```Cpp
+class QuarterlyReportTableHeaderGenerator {
+public:
+    string generate();
+};
+```
+QuarterlyReportTableHeaderGenerator 클래스는 QuarterlyReportGenerator와 마찬가지로 HTML을 생성한다.  
+둘 다 문자열 값을 반환하는 generate()메소드를 포함하며, 인터페이스 클래스를 정의한 후 이 클래스들에 상속함으로써 공통의 코드를 활용할 수 있다.  
+```Cpp
+class HTMLGenerator {
+public:
+    virtual ~HTMLGenerator() = 0;
+    virtual string generate() = 0;
+};
+
+class QuarterlyReportTableHeaderGenerator : public HTMLGenerator {
+public:
+    ...
+    virtual string generate();
+    ... 
+};
+
+class QuarterlyReportGenerator : public HTMLGenerator {
+public:
+    ...
+    virtual string generate();
+    ... 
+};
+```
+작업을 하다보면, QuarterlyReportGenerator는 테스트 루틴으로 보호하고 대부분의 처리는 HTML 생성 클래스들이 수행하도록 코드르 변경할 수도 있을 것이다.  
+발아 클래스를 애플리케이션의 기존 메커니즘에 도저히 집어넣을 수 없는 경우에는 발아 클래스가 새로운 메커니즘이 된다.  
+발아 클래스를 작성하는 경우는 본질적으로 다음 두 가지다.  
+1. 어떤 클래스에 완전히 새로운 역할을 추가하고 싶은 경우
+2. 기존 클래스에 약간 기능을 추가하고 싶지만 그 클래스를 테스트 하네스 내에서 테스트할 수 없는 경우
+
+### 발아 클래스의 작성 순서 
+1. 어느 부분의 코드를 변경해야 하는지 식별한다.
+2. 메소드 내의 특정 위치에서 일련의 명령문으로 변경을 구현할 수 있다면, 변경을 구현할 크래스에 적합한 이름을 생각한다. 이어서 해당 위치에 그 클래스의 객체를 생성하는 코드를 삽입하고, 클래스 내의 메소드를 호출하는 코드를 작성한다. 그리고 이 코드를 주석처리한다.
+3. 호출 메소드의 지역 변수 중에 필요한 것을 결정하고, 이 변수들을 클래스의 생성자가 호출될 떄의 인수로 만든다.
+4. 발아 클래스가 호출 메소드에 결과 값을 반환해야 하는지 판단한다. 값을 반환해야 한다면 그 값을 제공할 메소드를 클래스에 추가하고, 이 메소드를 호출해 반환 값을 받아오는 코드를 호출 메소드에 추가한다.
+5. 새로운 클래스를 테스트 주도 개발로 작성한다.
+6. 앞서 주석 처리했던 주석을 제거하고, 객체 생성과 호출을 활성화한다.
+
+### 장점과 단점
+장점: 코드를 직접 재작성하는 경우보다 확신을 갖고 변경 작업을 진행할 수 있다.  
+단점: 메커니즘이 복잡하다. 추상적인 처리 부분과 다른 클래스 내의 처리부분으로 이뤄지기 때문이 이해하기가 어렵다.  
 
 
 
