@@ -207,6 +207,110 @@ public:
 단점: 메커니즘이 복잡하다. 추상적인 처리 부분과 다른 클래스 내의 처리부분으로 이뤄지기 때문이 이해하기가 어렵다.  
 
 
+## 포장 메소드
+기존 메소드에 동작을 추가하는 것은 간단한 일이지만, 이것이 옳지 않은 접근법일 때가 많다. 추가되는 메소드 들은 의심스러운 것들이다. 개발자가 그런 코드를 추가하는 이유는 단지 추가 코드가 기존 코드와 동시에 실행되기 때문일 때가 있는데, 이는 과거에 일시적 결합(temporal coupling)이라 불리던 현상으로서 과도하게 사용하면 코드의 품질을 저하시킨다.  
+동작을 추가할 때 복잡하지 않은 기법을 사용할 필요가 있다. 포장 메소드를 사용해보자.  
+### 예시 
+```Cpp
+public class Employee {
+    ...
+    public void pay() {
+        Money amount = new Money();
+        for (Iterator it = timecards.iterator(); it.hasNext(); ) {
+            Timecard card = (TimeCard)it.next();
+            if (payPeriod.contains(date)) {
+                amount.add(card.getHours() * payRate);
+            }
+        }
+        payDispatcher.pay(this, date, amount);
+    }
+}
+```
+이 메소드는 직원의 타임카드(근무시간기록표)를 집계하고 급여 정보를 PayDispatcher객체로 보낸다.  
+여기서 직원에게 급여를 지급할 때 직원 이름으로 파일을 갱신해 별도의 보고서 작성 소프트웨어로 보내야 한다면?  
+코드를 추가하기 가장 쉬운 곳은 pay 메소드다. 결국 파일 처리는 pay 메소드와 동시에 일어나야 하기 때문이다. 이를 코드로 구현하면?  
+```Cpp
+public class Employee {
+    ...
+    // public void pay() {
+    private void dispatchPayment() {
+        Money amount = new Money();
+        for (Iterator it = timecards.iterator(); it.hasNext(); ) {
+            Timecard card = (TimeCard)it.next();
+            if (payPeriod.contains(date)) {
+                amount.add(card.getHours() * payRate);
+            }
+        }
+        payDispatcher.pay(this, date, amount);
+    }
+
+    public void pay() {
+        logPayment();
+        dispatchPayment();
+    }
+
+    private void logPayment() {
+        ...
+    }
+    ...
+}
+```
+이렇게 변경되면 이 클래스를 사용하는 고객은 이러하면 변경을 알지 못해도 된다.  
+기존 메소드와 이름이 같은 메소드를 새로 생성하고 기존 코드에 처리를 위임한다. 이것이 포장메소드  
+  
+다음은 포장 메소드의 다른 형태이다. 아직 호출된 적이 없는 새로운 메소드를 추가하고자 할 때 사용할 수 있다.
+
+```Cpp
+public class Employee {
+    public void makeLoggedPayment() {
+        logPayment();
+        pay();
+    }
+
+    public void pay() {
+        ...
+    }
+
+    private void logPayment() {
+        ...
+    }
+}
+```
+이제 Employee 클래스 사용자는 어느 방법으로 지불을 수행할지 선택할 수 있다.  
+
+#### 단점
+1. 새로 추가하려는 기능의 로직이 기존 기능의 로직과 통합될 수 없다. 새로운 기능은 기존 기능의 이전이나 이후에 수행돼야 한다. 하지만 이는 반드시 부정적이지 않으며, 가능하다면 이 기법을 사용하는 것이 좋다.  
+2. 기존 메소드 내의 코드를 위해 새로운 이름을 고안해야 한다는 점. 위 예제에서는 pay() 메소드 내의 코드를 dispatchPayment()라고 명명했다. 사실 이름이 적절하지 않음
+```Cpp
+public void pay() {
+    logPayment();
+    Money amount = calculatePay();
+    dispatchPayment(amount);
+}
+```
+> 사실 이렇게 가야 하는듯
+
+### 포장 메소드 작성 순서
+1. 변경해야 할 메소드를 식별한다.
+2. 변경이 메소드 내의 특정 위치에서 일련의 명령문으로 구현 가능하다면, 메소드 이름을 바꾸고 기존 메소드와 동일한 이름과 서명을 갖는 메소드를 새로 작성한다. 이때 서명을 그대로 유지하는 것을 잊지 말자.
+3. 새로운 메소드에서 기존 메소드를 호출하도록 한다.
+4. 새로운 기능을 위한 메소드를 테스트 주도 개발을 통해 작성하고, 이 메소드를 단계 2에서 작성한 신규 메소드에서 호출한다.
+
+#### 포장 메소드의 두 번째 형태, 즉 기존 메소드와 동일한 이름을 사용하지 않아도 되는 경우
+1. 변경하고자 하는 메소드를 식별한다.
+2. 변경이 메소드 내의 특정 위치에서 일련의 명령문으로 구현 가능하다면, 변경을 구현할 메소드를 테스트 주도 개발에 의해 새로 작성한다.
+3. 새 메소드와 기존 메소드를 호출하는 별도의 메소드를 작성한다.
+
+### 장점과 단점
+#### 장점
+1. 발아 메소드나 발아 클래스는 기존 메소드에 코드가 추가되기 때문에 코드의 길이가 최소한 한 줄이라도 늘어나지만, 포장 메소드는 기존 메소드의 길이가 변하지 않는다.
+2. 신규 기능이 기존 기능과 분명히 독립적으로 만들어진다.
+#### 단점
+1. 다소 부적절한 이름을 붙이기 쉽다.
+
+
+
+
 
 
 
