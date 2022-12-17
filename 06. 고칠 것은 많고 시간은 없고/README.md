@@ -309,7 +309,109 @@ public void pay() {
 1. 다소 부적절한 이름을 붙이기 쉽다.
 
 
+## 포장 클래스 
+포장 메소드를 클래스 수준으로 확장.
+### 예시
+```Cpp
+public class Employee {
+    ...
+    public void pay() {
+        Money amount = new Money();
+        for (Iterator it = timecards.iterator(); it.hasNext(); ) {
+            Timecard card = (TimeCard)it.next();
+            if (payPeriod.contains(date)) {
+                amount.add(card.getHours() * payRate);
+            }
+        }
+        payDispatcher.pay(this, date, amount);
+    }
+}
+```
+특정 직원에게 급여를 지급한 사실을 기록하고 싶다고 하자.  
+pay() 메소드를 갖는 별도의 클래스를 작성하자. 그 클래스 객체는 Employee객체를 갖고 pay()메소드로 기록을 수행하며, 지불을 수행하기 위해 Employee 클래스의 객체에 처리를 위임한다.  
+다음 코드는 Employee 클래스를 인터페이스로 바꾸기 위해 구현체 추출 기법을 사용한다. 그리고 새로운 클래스 LoggingEmployee는 이 인터페이스를 구현한다  
+모든 Employee객체를 LoggingEmployee로 전달할 수 있으며, LoggingEmployee 클래스는 지불과 기록을 동시에 수행할 수 있다.
+```Cpp
+class LoggingEmployee extends Employee {
+    public LoggingEmployee(Employee e) {
+        employee = e;
+    }
+    public void pay() {
+        logPayment();
+        employee.pay();
+    }
+    private void logPayment() {
+        ...
+    }
+    ...
+}
+```
+이런 기법을 데코레이터 패턴이라고 부른다. 다른 클래스를 포장하는 개체들을 생성한 후, 이 객체들을 차례로 전달.  
+포장 클래스는 내부에 포장되는 클래스와 동일한 인터페이스를 가져야 한다. 따라서 포장 클래스를 호출하는 쪽은 기존과 동일한 방법으로 호출할 수 있다.
+  
 
+다른방법..
+```Cpp
+class LoggerPayDispatcher {
+    private Employee e;
+    public loggingPayDispatcher(Employee e) {
+        this.e = e;
+    }
+    public void pay() {
+        employee.pay();
+        logPayment();
+    }
+    private void logPayment() {
+        ...
+    }
+    ...
+}
+```
+지불 기록이 필요한 위치에서 LoggingPayDispatcher 객체를 생성할 수 있게 됐다.  
+  
+포장 클래스의 핵심은 신규 동작을 기존 클래스에 추가하지 않으면서 시스템에 추가할 수 있다는 점이다.  
+
+### 적용 순서
+1. 어느 부분의 코드를 변경해야하는지 식별한다.
+2. 변경이 특정 위치에서 일련의 명령문으로 구현될 수 있다면, 포장 대상 클래스를 작성자의 인수로서 받는 클래스를 작성한다. 기존 클래스를 포장하는 클래스를 테스트 하네스 내에서 생성하기 어려울 경우 구현체 추출 혹은 인터페이스 추출 기법을 사용한다.
+3. 테스트 주도 개발 방법을 사용해서 포장 클래스에 새로운 처리를 수행하는 메소드를 작성한다. 또 메소드를 한 개 더 작성한 후, 이 메소드에서 신규 메소드 및 포장된 클래스 내의 기존 메소드를 호출한다.
+4. 새로운 동작이 수행될 위치에서 포장 클래스의 인스턴스를 생성한다.
+
+##### 발아 메소드와 포장 메소드의 차이
+기존 메소드로부터 신규 메소드를 호출하고 싶을 때는 발아 메소드를 사용. 기존 메소드의 이름을 변경하고, 이 메소드의 호출과 새로운 처리를 하는 신규 메소드를 호출하고 싶을 때는 포장 메소드를 사용
+##### 포장 클래스를 사용할지 여부
+1. 추가하려는 동작이 완전히 독립적이며, 구현에 의존적인 동작이나 관련이 없는 동작으로 기존 클래스를 오염시키고 싶지 않을 경우
+2. 클래스가 비대해져서 더 이상 키우고 싶지 않은 경우
+
+
+##### 데코레이터 패턴
+```Java
+abstract class ToolControllerDecorator extends ToolController {
+    protected ToolController controller;
+    public TollControllerDecorator(ToolController controller) {
+        this.controller = controller;
+    }
+    public void raise() { controller.raise(); }
+    public void lower() { controller.lower(); }
+    public void step{ controller.step(); }
+    public void on{ controller.on(); }
+    public void off{ controller.off(); }
+}
+
+public class StepNotifyingController extends ToolControllerDecorator {
+    private List notifyees;
+    public StepNotifyingController(ToolController controller, List notifyees) {
+        super(controller);
+        this.notifyees = notifyees;
+    }
+    public void step() {
+        // 여기서 모든 notifyee들에게 알림
+        ...
+        controller.step();
+    }
+}
+
+```
 
 
 
