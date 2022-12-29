@@ -186,11 +186,173 @@ mailing_list_dispatcher::mailing_list_dispatcher::mailing_list_dispatcher(mail_s
 이렇게 하면 됨  
 
 ## 복잡한 생성자
+생성자 내부에서 많은 수의 객체가 생성되거나 많은 수의 전역 변수에 접근하는 경우, 매개변수 목록의 크기가 지나치게 커질 수 있다.  
+```Cpp
+class WatercolorPane {
+public:
+    WatercolorPane(Form *border, WashBrush *brush, Pattern *backdrop) {
+        ...
+        anteriorPanel = new Panel(border);
+        anteriorPanel->setBorderColor(brush->getForeColor());
+        backgroundPanel = new Panel(border, backdrop);
+        cursor = new FocusWidget(brush, backgroundPanel);
+        ...
+    }
+    ...
+}
+```
+cursor 변수를 통해 감지 작업을 수행하려고 하면 문제가 발생한다. cursor 변수에 들어있는 FocusWidget 객체는 복잡한 객체 생성 코드 내에 포함되어 있다. 이 객체를 생성하는 코드를 전부 클래스 외부로 옮길 수 있다면, 호출 코드는 객체를 생성하고 이를 이눗로서 전달할 수 있다.  
+또는 인스턴스 변수 대체 기법이 있다. 객체를 생성한 후에 다른 인스턴스로 태체하기 위한 set메소드를 클래스에 추가하는 기법이다. 
+```Cpp
+class WatercolorPane {
+public:
+    WatercolorPane(Form *border, WashBrush *brush, Pattern *backdrop) {
+        ...
+        anteriorPanel = new Panel(border);
+        anteriorPanel->setBorderColor(brush->getForeColor());
+        backgroundPanel = new Panel(border, backdrop);
+        cursor = new FocusWidget(brush, backgroundPanel);
+        ...
+    }
+    ...
+
+    void supersedeCursor(FocusWidget *newCursor) {
+        delete cursor;
+        cursor = newCursor;
+    }
+}
 
 
+```
+이제 대체 메소드가 완성되었으니 WatercolorPane 클래스 외부에서 FocusWidget 객체를 생성하고, 이를 객체 생성 후에 전달하는 것을 시도할 수 있다.  
+그리고 인터페이스 추출 기법이나 구현체 추출 기법을 FocusWidget클래스에 적용하고, 가짜 객체를 생성해 전달함으로써 감지 작업을 수행할 수 있다.  
+```Cpp
+TEST(renderBorder, WatercolorPane) {
+    ...
+    TestingFocusWidget *widget = new TestingFocusWidget;
+    WatercolorPane pane(form, border, backdrop);
 
+    pane.supersedeCursor(widget);
+    LONGS_EQUAL(0, pane.getComponentCount());
+}
+```
+> 사실 이 방법 쫌 구리다고 한다..........
 
+## 까다로운 전역 의존 관계
+테스트 프레임워크에서 클래스 생성 및 사용을 어렵게 만드는 다양한 의존 관계들이 있다. 그중에서도 가장 까다로운 것이 전역 변수의 사용이다.  
+다음은 정부 기관이 사용하는 건축 허가 관리 자바 애플리케이션의 클래스다.  
+```Java
+public class Facility {
+    private Permit basePermit;
 
+    public Facility(int facilityCode, String owner, PermitNotice notice) throws PermitViolation {
+        Permit associatedPermit = PermitRepository.getInstance().findAssociatedPermit(notice);
+
+        if (associatedPermit.isValid() && !notice.isValid()) {
+            basePermit = associatedPermit;
+        } else if (!notice.isValid()) {
+            Permit permit = new Permit(notice);
+            permit.validate();
+            basePermit = permit;
+        } else {
+            throw new PermitViolation(permit);
+        }
+    }
+    ...
+}
+```
+테스트 하네스에서 Facility를 생성하고 싶으니 한번 시도해보자.
+```Java
+public void testCreate() {
+    PermitNotice notice = new PermitNotice(0, "a");
+    Facility facility = new Facility(Facility.RESIDENCE, "b", notice);
+}
+```
+컴파일은 통과했지만 추가로 테스트 코드를 작성하면서 문제점을 깨닫게 된다. 생성자는 PermitRepository 클래스를 사용하기 떄문에 테스트를 제대로 수행하려면 일련의 허가(Permit 객체)들로 초기화해야 한다. 생성자 내에는 다음과 같은 말썽의 소지가 있는 문장이 있다.
+```Java
+Permit associatedPermit = PermitRepository.getInstance().findAssociatedPermit(notice);
+```
+> 이거 싱글톤임 ㅡ,.ㅡ  
+  
+싱글톤은 해당 정보가 어디에 어떻게 영향을 끼치는지 알기 매우 어렵기 때문에 바람직하지 않음.  
+테스트 코드 내에서는 테스트 집합 내의 각개별 테스트 루틴을 하나의 작은 어플리케이션으로 봐야하기 떄문에 데이터들이 상호 영향을 주고 받으면 안된다.  
+싱글톤의 제약을 풀어야한다.  
+```Java
+public class PermitRepository {
+    private static PermitRepository instance = null;
+    private PermitRepository() {}
+    public static void setTestingInstance(PermitRepository newInstance) { // 이걸 추가하면 Testable해짐
+        instance = newInstance
+    }
+    public static PermitRepository getInstance() {
+        if (instance == null) {
+            instance = new PermitRepository();
+            return instance
+        }
+    }
+    public Permit findAssociatedPermit(PermitNotice notice) {
+        ...
+    }
+    ...
+}
+```
+-> 테스트프레임워크 setup부분
+```Java
+public void setUp() {
+    PermitRepository repository = new PermitRepository();
+    ... 
+    // 여기서 repository에 권한을 부여
+    ...
+    PermitRepository.setTestingInstance(repository);
+}
+```
+아직 작동 안함.. 싱글톤 디자인 패턴을 사용할 때는 대체로 싱글톤 클래스의 생성자를 private으로 선언하는데, 싱글톤의 또 다른 인스턴스를 클래스 외부에서 생성하지 못하도록 막기 위해서다.  
+여기서 설계 망함.. 인스턴스가 한개여야만 한다 vs 테스트를 위해 인스턴스를 여러번 생성한다.  
+잠시 뒤를 돌아보아서 애당초 우리는 왜 시스템 내에 클래스의 인스턴스가 한 개만 생성되길 원하는가?
+ 1. 현실 세계를 모델링한 결과, 현실 세계에 한 개만 존재하기 때문
+ 2. 두 개가 존재한다면 심각한 문제가 발생하는 경우
+ 3. 두 개를 생성하면 자원 소모가 극심할 경우
+  
+이러한 이유로 싱글톤을 사용하지만 이것이 싱글톤을 사용하는 주요 이유는 아니다. 많은 사람들이 전역 변수를 갖기 위해 싱글톤을 생성하곤 한다. 변수를 필요한 장소로 여기저기로 전달하는 것을 힘들어 하기 떄문.  
+만일 후자의 이유라면 싱글톤 없애야한다.  
+  
+어쨋든 여기선 public으로 생성자를 열어둠으로써 싱글톤 특성을 완화 하던가..  
+아래와 같이 상속을 받자
+```Java
+public class TestingPermitRepository extends PermitRepository {
+    private Map permits = new HashMap();
+    public void addAssociatedPermit(PermitNotice notice, permit) {
+        permit.put(notice, permit);
+    }
+
+    public Permit findAssociatedPermit(PermitNotice notice) {
+        return (Permit)permits.get(notice);
+    }
+}
+```
+이렇게 씀으로써 PermitRepository의 생성자를 public이 아닌 protected까진 할 수 있다.  
+  
+인터페이스를 추출하면
+```Java
+public class PermitRepository implements IPermitRepository {
+    private static PermitRepository instance = null;
+    private PermitRepository() {}
+    public static void setTestingInstance(PermitRepository newInstance) { // 이걸 추가하면 Testable해짐
+        instance = newInstance
+    }
+    public static IPermitRepository getInstance() {
+        if (instance == null) {
+            instance = new PermitRepository();
+            return instance
+        }
+    }
+    public Permit findAssociatedPermit(PermitNotice notice) {
+        ...
+    }
+    ...
+}
+```
+요렇게도 가능
 
 
 
