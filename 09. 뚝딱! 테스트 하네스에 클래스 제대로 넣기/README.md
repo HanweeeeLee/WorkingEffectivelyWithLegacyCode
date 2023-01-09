@@ -355,6 +355,146 @@ public class PermitRepository implements IPermitRepository {
 요렇게도 가능
 
 
+## 공포스러운 인클루드 의존관계
+~~우선 C++에 대한 이야기..  
+C++에서 한 클래스가 다른 클래스에 대해 알고 싶다면, 다른 파일에 들어있는 클래스 선언문을 텍스트 형태로 호출 측 파일에 인클루드 해야함. #include MyClass.h  
+이 방식은 컴파일러가 이 선언문을 발견할 때마다 파싱을 다시 수행하고 빌드해야하기 때문에 오래걸린다.  
+더욱 문제가 되는 것은 인클루드가 과도하게 사용되는 경향이 있음.~~
+```Cpp
+#ifndef SCHEDULER_H
+#define SCHEDULER_H
+
+#include "Meeting.h"
+#include "MailDaemon.h"
+...
+#include "SchdulerDisplay.h"
+#include "DayTime.h"
+class Scheduler {
+public:
+    Scheduler(const string& owner);
+    ~Scheduler();
+    void addEvent(Event *event);
+    bool hasEvents(Date date);
+    bool performConsistencyCheck(string& message);
+    ...
+}
+#endif
+```
+> 어떻게 테스트 루틴 내에서 Scheduler를 생성할 수 있을까?
+  
+~~가장 손 쉬운 방법은 동일 디렉토리에 SchedulerTests라는 파일 생성 후 빌드해봄 -> 전처리기 때문에~~
+-> 너무 C++이라 그냥 건너뛰어도 될듯. 
+
+## 양파껍질 매개변수 
+모든 객체는 이후의 처리를 제대로 처리할 수 있도록 적절한 상태로 설정돼 있어야 한다. 이렇게 되려면 적절히 설정된 별도의 객체를 전달 받아야 할 떄가 많다. 그리고 이 객체의 설정을 위해 또 다른 객체가 필요하다. 따라서 테스트 대상 클래스의 생성자에 전달될 매개변수를 생성하기 위해 객체를 생성하고, 그 객체를 생성하기 위해 다른 객체를 생성하고 ~~~~~~  
+객체 내에 또 다른 객체는 이른바 양파껍질 벗기기와 비슷하다.
+```Java
+public class SchedulingTaskPane extends SchedulerPane {
+    public SchedulingTaskPane(SchedulingTask task) {
+        ...
+    }
+}
+```
+이 클래스를 작성하려면 SchedulingTask 객체를 전달해야 한다. 그런데 SchedulingTask에 사용되는 생성자는 다음의 코드가 유일하다
+```Java
+public class SchedulingTask extends SerialTask {
+    public SchedulingTask(Scheduler scheduler, MeetingResolver resolver) {
+        ...
+    }
+}
+```
+> 또.. 필요하다.. ㅆ..?
+  
+이걸 어떻게 해야할까  
+매개 변수 중에서 테스트에 불필요한것은 Null 전달 기법을 사용하자.  
+몇 개의 기본적인 동작만 필요하다면, 직접 의존 관계를 갖는것에 인터페이스 추출이나 구현체 추출 기법을 사용해 인터페이스를 통한 가짜 객체를 생성할 수 있을것이다.  
+![KakaoTalk_Photo_2023-01-09-23-24-20](https://user-images.githubusercontent.com/60125719/211330534-33d6b8f7-2116-421d-b040-6a1f9254f7fe.jpeg)
+
+```Cpp
+class SerialTask {
+    public:
+    virtual void run();
+    ...
+};
+
+class ISchedulingTask {
+public: 
+    virtual void run() = 0;
+    ...
+};
+
+class SchedulingTask: public SerialTask, public ISchedulingTask {
+    public virtual void run() { SerialTask::run(); }
+}
+
+```
+> 대충 C++로 되어있는 예제.. Cpp은 인터페이스 라는게 없어서 ㅡㅡ;; 이렇게 해야한다고 한다 ㅡ,.ㅡ;; 뭐 우리랑은 상관 없는 얘기일듯
+
+## 별명을 갖는 매개변수
+생성자의 매개변수가 문제가 되는 경우에는 대체로 인터페이스 추출이나 구현체 추출기법을 사용해 문제를 우회할 수 있다. 그러나 가끔 안될때도 있다.
+```Java
+public class IndustrialFacility extends Facility {
+    Permit basePermit;
+
+    public IndustrialFacility(int facilityCode, String owner, OriginationPermit permit) throws PermitViolation {
+        Permit associatedPermit = PermitRepository.getInstance().findAssociatedFromOrigination(permit);
+
+        if (associatedPermit.isValid() && !permit.isValid()) {
+            basePermit = associatedPermit
+        } else if (!permit.isValid()) {
+            permit.validate();
+            basePermit = permit;
+        } else {
+            throw new PermitViolation(permit);
+        }
+    }
+}
+```
+테스트 하네스에서 이 클래스를 생성하는 데 몇 가지 문제가 있다. 
+1. PermitRepository 싱글톤에 접근하고 있다. -> 앞에서 배운 '까다로운 전역 의존 관계'절에서 설명한 기법으로 처리할 수 있다.
+2. 생성자에게 전달해야 하는 OriginationPermit 객체를 생성하기가 어렵다. (OriginationPermit 이 의존관계가 복잡함) -> 인터페이스를 추출해 의존관계를 제거하면 되겠구나?! -> 확인해보자
+![KakaoTalk_Photo_2023-01-09-23-37-42](https://user-images.githubusercontent.com/60125719/211333532-a01280a9-3a2a-4d89-8c83-a8f038bbee4c.jpeg)
+IndustrialFacility 생성자는 OriginationPermit을 받아서 PermitRepository로부터 관련 Permit을 얻기위해 PermitRepository로부터의 메소드를 사용한다.  
+관련 Permit을 발견하면 이를 basePermit에 저장하고, 못찾으면 OriginationPermit을 basePermit필드에 저장한다.  
+인터페이스들로만 이뤄진 계층 구조를 생성한 후 Permit필드를 IPermit필드로 변환하자.  
+![KakaoTalk_Photo_2023-01-09-23-41-53](https://user-images.githubusercontent.com/60125719/211334397-9eaa2b1f-3360-486f-8431-74ec98c13fc9.jpeg)
+> 그런데 이거 너무 어려움..  
+  
+인터페이스는 의존관계 제거에는 효과적이지만 이방법뿐이 없는것은 아니다.  
+해당 클래스와의 연결을 그냥 제거하면 될 떄도 있다. 
+```Java
+public class OriginationPermit extends FacilityPermit {
+    ...
+    public void validate() {
+        // 데이터베이스 연결
+        ...
+        // 정보 검증 질의
+        ...
+        // 확인 플래그 설정
+        ... 
+        // 데이터베이스 연결 해제
+    }
+}
+```
+> validate에서 디비에 접근하고 있다.  
+  
+테스트 중에 이 메소드를 실행시키고 싶지 않음.  
+이 상황에선 서브클래스화 메소드 재정의 기법을 써볼만하다.  
+FakeOriginationPermit이라는 클래스를 만들어서 검증 플래그를 쉽게 변경할 수 있는 메소드를 제공한 후, 서브클래스에서 재정의된 validate 메소드를 IndustrialFacility 클래스를 테스트하는 동안에 사용함으로써 검증 플래그를 변경할 수 있다.
+```Java
+public void testHasPermits() {
+    class AlwaysValidPermit extends FakeOriginationPermit {
+        public void validate() {
+            //확인플래그 설정
+            becomeValid();
+        }
+    };
+
+    Facility facility = new IndustrialFacility(Facility.HT_1, "b", AlwaysValidPermit());
+    assertTrue(facility.hasPermit());
+}
+```
+
 
 
 
