@@ -14,7 +14,7 @@
 
 다음 예제는 메일링 리스트 서버로서 엉성하며 실제로 동작할지 여부를 알수 없다
 ```Java
-inport java.io.IOException;
+import java.io.IOException;
 import java.util.Properties;
 
 import javax.mail.*;
@@ -152,9 +152,16 @@ public class MailingListServer
       transport.sendMessage(forward, roster.getAddresses());
       message.setFlag(Flags.Flag.DELETED, true);
     }
-  }
-  
+  }  
   
 }
 ```
+그다지 길지 않지만 쉽게 이해할 수는 없는게, API와 관련없는 코드가 거의 없기 때문이다.  
+이 코드를 개선하려면, 첫번째로 코드의 핵심 연산을 식별해야 한다. 다음과 같이 간단한 설명을 작성해보자
+> 이 코드는 명령행에서 설정 정보를 읽고, 파일로부터 이메일 주소 목록을 읽는다. 이메일을 주기적으로 확인한다. 수신메일을 발견하면, 파일 내의 이메일 주소 각각에 해당 메일을 전달한다.
+
+이 프로그램에서는 입출력을 주로 수행하지만 그외에도 코드 내에서 스레드를 실행하여 메일 확인을 하기도 하고 수신메일에 기반해 새로운 메시지를 만들기도 한다.  
+이 코드의 책임을 구분해서 정리하자면
+1. 수신 메시지를 받아서 시스템에 전달한다
+
 
