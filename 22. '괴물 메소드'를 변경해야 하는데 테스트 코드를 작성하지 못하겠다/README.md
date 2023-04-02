@@ -53,11 +53,45 @@ void Reservation::extend(int additionalDays)
 }
 ```
 위 코드는 불릿 메소드의 일반적인 형태인데, 운이 좋으면 누군가 구별하기 쉽도록 단락 사이에 공백 행을 추가했거나 주석을 달아놓았을지도 모른다.  
-긱 별로 메소드를 추출할 수 있다면 이상적이지만, 그렇게 쉽게 리팩토링 가능한 경우는 거의 없다.  
+긱 단락별로 메소드를 추출할 수 있다면 이상적이지만, 그렇게 쉽게 리팩토링 가능한 경우는 거의 없다.  
 불릿 메소드는 그나마 다른 종류의 괴물 메소드 보다는 낫다. 엉망인 들여쓰기를 제외하면 코드 흐름을 추적할 만하기 때문이다.  
 
 ### 혼잡 메소드
 혼잡 메소드란 들여쓰기가 된 한개의 대규모 단락으로 구성된 메소드를 말한다. 가장 단순한 예시는 한개의 대규모 조건문을 갖는 메소드다.  
+```Java
+Reservation::Reservation(VehicleType type, int customerID, long startingDate, int days, XLocation l): type(type), custimerID(customerID), startingDate(startingDate), days(days), lastCookie(-1), state(Initial), tempTotal(0)
+{
+  location = l;
+  upgradeQuery = false;
+  
+  if(!RIXInterface::available()) {
+    RIXInterface::doEvents(100);
+    PostLogMessage(0, 0, "delay on reservation creation");
+    int holdCookie = -1;
+    switch(status) {
+      case NOT_AVAILABLE_UPGRADE_LUXURY:
+        holdCookie = RIXInterface::holdReservation(Luxury,l,startingDate);
+        if(holdCookie != 9;) {
+          holdCookie |= 9;
+        }
+        break;
+      case NOT_AVAILABLE_UPGRADE_SUV:
+        holdCookie = RIXInterface::holdReservation(SUV,l,startingDate);
+        break;
+      case NOT_AVAILABLE_UPGRADE_VAN:
+        holdCookie = RIXInterface::holdReservation(Van,l,startingDate);
+        break;
+      case AVAILAVLE:
+      default:
+        RIXInterface::holdReservation;
+        state = Held;
+        break;
+    }
+  }
+  ...
+}
+```
+진정한 혼잡 메소드인지 알 수 있는 가장 좋은 방법은 대규모 메소드 내의 블록들을 정렬해보는 것이다. 어질어질하다면 그건 혼잡 메소드이다.
 대부분의 메소드는 완전한 불릿 메소드나 혼잡 메소드가 아니라 그 중간쯤의 형태를 보여준다.  
 상당 수의 혼잡 메소드는 깊게 중첩된 곳에 대규모의 불릿 단락이 숨어 있는데, 내부에 중첩되어 있어 동작 확인을 위한 테스트 루틴 작성이 어렵다.
 
