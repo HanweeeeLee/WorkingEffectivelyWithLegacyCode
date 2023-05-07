@@ -258,6 +258,9 @@ TEST(messaging,Pager)
 ```
 sendMessage가 호출 됐을때 TestingPager::formConnection이 사용돼 올바르게 동작할 것이다.
 
+### 단계
+1. 대체하고자 하는 인스턴스 변수를 식별한다.
+
 ## 템플릿 재정의
 
 ## 텍스트 재정의
